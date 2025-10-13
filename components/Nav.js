@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 export default function Nav() {
   return (
     <nav className="flex justify-between items-center px-6 py-4 border-b border-neutral-200">
@@ -7,14 +9,14 @@ export default function Nav() {
 
       <ul className="flex gap-6 text-sm font-medium">
         <li>
-          <a href="/wordimposter" className="hover:text-blue-600 transition-colors">
+          <Link href="/wordimposter" className="hover:text-blue-600 transition-colors">
            Word Imposter 
-          </a>
+          </Link>
         </li>
         <li>
-          <a href="/contact" className="hover:text-blue-600 transition-colors">
+          <Link href="/contact" className="hover:text-blue-600 transition-colors">
             Contact
-          </a>
+          </Link>
         </li>
       </ul>
     </nav>
