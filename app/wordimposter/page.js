@@ -29,8 +29,7 @@ export default function WordImposter() {
 
   const [remaining, setRemaining] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
-
-  /** @type {{ current: number|null }} */
+  const [paused, setPaused] = useState(false);
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -126,19 +125,19 @@ export default function WordImposter() {
   const startTimer = useCallback(() => {
     if (timerRunning) return;
 
-    const secs = Math.max(5, Number(roundSecondsInput) || 60);
+    let secs = paused ? remaining : Math.max(5, Number(roundSecondsInput) || 60);
     setRemaining(secs);
     setTimerRunning(true);
+    setPaused(false);
 
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       setRemaining((r) => {
         if (r <= 1) {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
           setTimerRunning(false);
+          setPaused(false);
           if (typeof navigator !== "undefined" && "vibrate" in navigator) {
             try {
               navigator.vibrate?.(200);
@@ -149,12 +148,22 @@ export default function WordImposter() {
         return r - 1;
       });
     }, 1000);
-  }, [roundSecondsInput, timerRunning]);
+  }, [roundSecondsInput, paused, remaining, timerRunning]);
+
+  const pauseTimer = useCallback(() => {
+    if (!timerRunning) return;
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    setTimerRunning(false);
+    setPaused(true);
+  }, [timerRunning]);
 
   const stopTimer = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = null;
     setTimerRunning(false);
+    setPaused(false);
+    setRemaining(0);
   }, []);
 
   const revealImposters = useCallback(() => setShowImposters(true), []);
@@ -265,48 +274,71 @@ export default function WordImposter() {
               </p>
             </div>
 
-            {!timerRunning && remaining > 0 && (
-              <button
-                onClick={startTimer}
-                className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
-              >
-                Start Timer ({formatTime(remaining)})
-              </button>
-            )}
+{/* INITIAL START (only before the first start) */}
+{!timerRunning && !paused && remaining > 0 && (
+  <button
+    onClick={startTimer}
+    className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
+  >
+    Start Timer ({formatTime(remaining)})
+  </button>
+)}
 
-            {timerRunning && (
-              <div className="rounded-2xl border border-neutral-200 p-4 text-center">
-                <p className="text-sm text-neutral-500">Time remaining</p>
-                <p className="text-4xl font-bold tracking-tight">{formatTime(remaining)}</p>
-                <button
-                  onClick={stopTimer}
-                  className="mt-3 w-full rounded-xl bg-neutral-100 px-4 py-3 text-base font-semibold active:scale-[0.98]"
-                >
-                  Pause
-                </button>
-              </div>
-            )}
+{/* TIMER CARD — stays visible when running OR paused */}
+{(timerRunning || paused) && (
+  <div className="rounded-2xl border border-neutral-200 p-4 text-center">
+    <p className="text-sm text-neutral-500">
+      {paused ? "Paused" : "Time remaining"}
+    </p>
+    <p className="text-4xl font-bold tracking-tight">{formatTime(remaining)}</p>
 
-            {!timerRunning && remaining <= 0 && (
-              <div className="space-y-3 text-center">
-                <p className="text-lg font-semibold">⏰ Time up! Vote!</p>
+    <div className="flex gap-3 mt-3">
+      {paused ? (
+        <button
+          onClick={startTimer} // resume
+          className="flex-1 rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
+        >
+          Resume
+        </button>
+      ) : (
+        <button
+          onClick={pauseTimer}
+          className="flex-1 rounded-xl bg-neutral-100 px-4 py-3 text-base font-semibold active:scale-[0.98]"
+        >
+          Pause
+        </button>
+      )}
 
-                {!showImposters ? (
-                  <button
-                    onClick={revealImposters}
-                    className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
-                  >
-                    Reveal Imposter
-                  </button>
-                ) : (
-                  <div className="rounded-2xl border border-neutral-200 p-4">
-                    <p className="text-base">
-                      The imposter was: <strong>{players[imposterIndex]}</strong> 🕵️‍♂️
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+      <button
+        onClick={stopTimer}
+        className="flex-1 rounded-xl bg-neutral-100 px-4 py-3 text-base font-semibold active:scale-[0.98]"
+      >
+        Stop
+      </button>
+    </div>
+  </div>
+)}
+
+{/* TIME'S UP */}
+{!timerRunning && !paused && remaining <= 0 && (
+  <div className="space-y-3 text-center">
+    <p className="text-lg font-semibold">⏰ Time up! Vote!</p>
+    {!showImposters ? (
+      <button
+        onClick={revealImposters}
+        className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
+      >
+        Reveal Imposter
+      </button>
+    ) : (
+      <div className="rounded-2xl border border-neutral-200 p-4">
+        <p className="text-base">
+          The imposter was: <strong>{players[imposterIndex]}</strong> 🕵️‍♂️
+        </p>
+      </div>
+    )}
+  </div>
+)}
 
             <button
               onClick={resetGame}
