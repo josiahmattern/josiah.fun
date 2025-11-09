@@ -1,23 +1,61 @@
 "use client";
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 
 export default function WordImposter() {
-  const words = useMemo(() => ["apple", "moon", "bridge", "river", "storm"], []);
+  // Load words from /public/words.txt
+  const [wordList, setWordList] = useState([]);
+  const [wordsLoaded, setWordsLoaded] = useState(false);
 
+  useEffect(() => {
+    async function loadWords() {
+      try {
+        const res = await fetch("/words.txt");
+        const text = await res.text();
+        const lines = text.split(/\r?\n/).map((w) => w.trim()).filter(Boolean);
+        setWordList(lines);
+        setWordsLoaded(true);
+      } catch (e) {
+        console.error("Failed to load words:", e);
+      }
+    }
+    loadWords();
+  }, []);
+
+  // Inputs (persisted)
   const [namesInput, setNamesInput] = useState(
     () => (typeof window !== "undefined" && localStorage.getItem("wi:names")) || ""
   );
-  const [roundSecondsInput, setRoundSecondsInput] = useState(() => {
+  const [imposterCountInput, setImposterCountInput] = useState(() => {
     if (typeof window !== "undefined") {
-      const saved = Number(localStorage.getItem("wi:secs"));
-      if (!Number.isNaN(saved) && saved >= 5) return saved;
+      const saved = Number(localStorage.getItem("wi:imps"));
+      if (!Number.isNaN(saved) && saved >= 1) return saved;
     }
-    return 60;
+    return 1;
+  });
+  const [stealthImposters, setStealthImposters] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("wi:stealth") === "1";
+    }
+    return false;
   });
 
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("wi:names", namesInput);
+  }, [namesInput]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("wi:imps", String(imposterCountInput));
+  }, [imposterCountInput]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("wi:stealth", stealthImposters ? "1" : "0");
+  }, [stealthImposters]);
+
+  // Game state
   const [players, setPlayers] = useState([]);
   const [secretWord, setSecretWord] = useState("");
-  const [imposterIndex, setImposterIndex] = useState(-1);
+  const [imposterWord, setImposterWord] = useState(""); // used only in stealth mode
+  const [imposters, setImposters] = useState(new Set());
   const [firstPlayerIndex, setFirstPlayerIndex] = useState(-1);
 
   const [started, setStarted] = useState(false);
@@ -27,35 +65,24 @@ export default function WordImposter() {
   const [finished, setFinished] = useState(false);
   const [showImposters, setShowImposters] = useState(false);
 
-  const [remaining, setRemaining] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const intervalRef = useRef(null);
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("wi:names", namesInput);
-  }, [namesInput]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("wi:secs", String(roundSecondsInput));
-  }, [roundSecondsInput]);
+  // Double-tap reveal state
+  const [confirmingReveal, setConfirmingReveal] = useState(false);
+  const confirmTimerRef = useRef(null);
 
   const parseNames = useCallback(() => {
-    return namesInput
-      .split(/[\n,]/)
-      .map((n) => n.trim())
-      .filter(Boolean);
+    return namesInput.split(/[\n,]/).map((n) => n.trim()).filter(Boolean);
   }, [namesInput]);
 
-  const canStart = useMemo(() => parseNames().length >= 3, [parseNames]);
+  const canStart = useMemo(() => {
+    const count = parseNames().length;
+    return count >= 3 && wordsLoaded;
+  }, [parseNames, wordsLoaded]);
+
+  const chooseImposters = (nPlayers, k) => {
+    const set = new Set();
+    while (set.size < k) set.add(Math.floor(Math.random() * nPlayers));
+    return set;
+  };
 
   const startGame = useCallback(() => {
     const names = parseNames();
@@ -63,37 +90,85 @@ export default function WordImposter() {
       alert("Need at least 3 players");
       return;
     }
+    if (!wordsLoaded || wordList.length === 0) {
+      alert("Word list not loaded yet — try again in a second.");
+      return;
+    }
 
-    const secs = Math.max(5, Number(roundSecondsInput) || 60);
+    const word = wordList[Math.floor(Math.random() * wordList.length)];
+    const maxImps = Math.max(1, Math.min(imposterCountInput || 1, names.length - 1));
+    const impSet = chooseImposters(names.length, maxImps);
 
-    const word = words[Math.floor(Math.random() * words.length)];
-    const imp = Math.floor(Math.random() * names.length);
-
+    // First player not an imposter
     let first = Math.floor(Math.random() * names.length);
-    while (first === imp) first = Math.floor(Math.random() * names.length);
+    while (impSet.has(first)) first = Math.floor(Math.random() * names.length);
+
+    // If stealth mode, pick an imposter word different from the civilian one
+    let impWord = "";
+    if (stealthImposters && maxImps > 0) {
+      do {
+        impWord = wordList[Math.floor(Math.random() * wordList.length)];
+      } while (impWord === word && wordList.length > 1);
+    }
 
     setPlayers(names);
     setSecretWord(word);
-    setImposterIndex(imp);
+    setImposterWord(impWord);
+    setImposters(impSet);
     setFirstPlayerIndex(first);
-
     setStarted(true);
     setI(0);
     setRevealed(false);
     setMessage("");
     setFinished(false);
     setShowImposters(false);
+    setConfirmingReveal(false);
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
+  }, [parseNames, wordList, wordsLoaded, imposterCountInput, stealthImposters]);
 
-    setRemaining(secs);
-    setTimerRunning(false);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-  }, [parseNames, roundSecondsInput, words]);
-
-  const reveal = useCallback(() => {
+  const actuallyReveal = useCallback(() => {
     if (revealed) return;
-    setMessage(i === imposterIndex ? "IMPOSTER" : secretWord);
+    const isImp = imposters.has(i);
+    if (isImp && !stealthImposters) {
+      setMessage("IMPOSTER");
+    } else if (isImp && stealthImposters) {
+      setMessage(imposterWord || "IMPOSTER"); // safety fallback
+    } else {
+      setMessage(secretWord);
+    }
     setRevealed(true);
-  }, [revealed, i, imposterIndex, secretWord]);
+  }, [revealed, i, imposters, stealthImposters, imposterWord, secretWord]);
+
+  // Double-tap handler
+  const handleRevealPress = useCallback(() => {
+    if (revealed) return;
+
+    // First tap -> arm
+    if (!confirmingReveal) {
+      setConfirmingReveal(true);
+      setMessage("Tap again to reveal");
+      if (confirmTimerRef.current) {
+        clearTimeout(confirmTimerRef.current);
+      }
+      confirmTimerRef.current = setTimeout(() => {
+        setConfirmingReveal(false);
+        setMessage("");
+        confirmTimerRef.current = null;
+      }, 1500);
+      return;
+    }
+
+    // Second tap within window -> reveal
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
+    setConfirmingReveal(false);
+    actuallyReveal();
+  }, [confirmingReveal, revealed, actuallyReveal]);
 
   const nextPlayer = useCallback(() => {
     if (i + 1 >= players.length) {
@@ -103,12 +178,18 @@ export default function WordImposter() {
     setI((prev) => prev + 1);
     setRevealed(false);
     setMessage("");
+    setConfirmingReveal(false);
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
   }, [i, players.length]);
 
   const resetGame = useCallback(() => {
     setPlayers([]);
     setSecretWord("");
-    setImposterIndex(-1);
+    setImposterWord("");
+    setImposters(new Set());
     setFirstPlayerIndex(-1);
     setStarted(false);
     setI(0);
@@ -116,76 +197,32 @@ export default function WordImposter() {
     setMessage("");
     setFinished(false);
     setShowImposters(false);
-
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    setTimerRunning(false);
-    setRemaining(0);
-  }, []);
-
-  const startTimer = useCallback(() => {
-    if (timerRunning) return;
-
-    let secs = paused ? remaining : Math.max(5, Number(roundSecondsInput) || 60);
-    setRemaining(secs);
-    setTimerRunning(true);
-    setPaused(false);
-
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-          setTimerRunning(false);
-          setPaused(false);
-          if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-            try {
-              navigator.vibrate?.(200);
-            } catch {}
-          }
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
-  }, [roundSecondsInput, paused, remaining, timerRunning]);
-
-  const pauseTimer = useCallback(() => {
-    if (!timerRunning) return;
-    clearInterval(intervalRef.current);
-    intervalRef.current = null;
-    setTimerRunning(false);
-    setPaused(true);
-  }, [timerRunning]);
-
-  const stopTimer = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = null;
-    setTimerRunning(false);
-    setPaused(false);
-    setRemaining(0);
+    setConfirmingReveal(false);
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
   }, []);
 
   const revealImposters = useCallback(() => setShowImposters(true), []);
 
-  const formatTime = (s) => {
-    const m = Math.floor(s / 60).toString().padStart(2, "0");
-    const ss = (s % 60).toString().padStart(2, "0");
-    return `${m}:${ss}`;
-  };
+  const imposterCount = imposters.size;
 
   return (
     <div className="min-h-screen w-full bg-white text-neutral-900 flex items-center justify-center px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-6">
       <div className="w-full max-w-md">
         <header className="mb-4">
           <h1 className="text-3xl font-bold tracking-tight">Word Imposter</h1>
-          <p className="text-sm text-neutral-500">quick, clean, mobile-first</p>
+          <p className="text-sm text-neutral-500 my-1">
+            Play <span className="font-bold"> 2 to 3</span> rounds for a full game.
+          </p>
         </header>
 
+        {/* SETUP */}
         {!started && (
           <section className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Enter names (comma or newline)</label>
+              <label className="text-sm font-medium">Enter player names (comma or newline)</label>
               <textarea
                 rows={5}
                 value={namesInput}
@@ -196,46 +233,56 @@ export default function WordImposter() {
               />
             </div>
 
-            <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Round timer (seconds)</label>
+                <label className="text-sm font-medium">Number of imposters</label>
                 <input
                   type="number"
-                  min={5}
-                  value={roundSecondsInput}
-                  onChange={(e) => setRoundSecondsInput(Number(e.target.value))}
+                  min={1}
+                  value={imposterCountInput}
+                  onChange={(e) => setImposterCountInput(Math.max(1, Number(e.target.value) || 1))}
                   className="w-full rounded-xl border border-neutral-300 p-3 text-base outline-none focus:ring-2 focus:ring-black/10"
                   inputMode="numeric"
                 />
               </div>
+
               <button
                 onClick={startGame}
                 disabled={!canStart}
                 className={`rounded-xl px-4 py-3 text-base font-semibold transition w-full sm:w-auto ${
-                  canStart
-                    ? "bg-black text-white active:scale-[0.98]"
-                    : "bg-neutral-200 text-neutral-500"
+                  canStart ? "bg-black text-white active:scale-[0.98]" : "bg-neutral-200 text-neutral-500"
                 }`}
-                aria-disabled={!canStart}
               >
-                Start
+                {wordsLoaded ? "Start" : "Loading words…"}
               </button>
             </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={stealthImposters}
+                onChange={(e) => setStealthImposters(e.target.checked)}
+                className="h-4 w-4 rounded border-neutral-300"
+              />
+              <span>Stealth imposters (imposters also get a word)</span>
+            </label>
+
             <p className="text-xs text-neutral-500">Need at least 3 players.</p>
           </section>
         )}
 
+        {/* REVEAL PHASE */}
         {started && !finished && (
           <section className="space-y-5">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-xl font-semibold">Tap the player to reveal</h2>
+              <h2 className="text-xl font-semibold">Double-tap the player to reveal</h2>
               <p className="text-sm text-neutral-500">
                 {i + 1} / {players.length}
               </p>
             </div>
 
             <button
-              onClick={reveal}
+              onClick={handleRevealPress}
               className="w-full rounded-2xl border border-neutral-300 p-5 text-2xl font-bold active:scale-[0.98]"
             >
               {players[i]}
@@ -243,20 +290,17 @@ export default function WordImposter() {
 
             <p
               className={`min-h-[2.25rem] text-center text-xl ${
-                revealed ? "font-semibold" : "text-neutral-400"
+                revealed ? "font-semibold" : confirmingReveal ? "text-amber-600" : "text-neutral-400"
               }`}
-              aria-live="polite"
             >
-              {revealed ? message : "—"}
+              {revealed ? message : message || "—"}
             </p>
 
             <button
               onClick={nextPlayer}
               disabled={!revealed}
               className={`w-full rounded-xl px-4 py-3 text-base font-semibold transition ${
-                revealed
-                  ? "bg-black text-white active:scale-[0.98]"
-                  : "bg-neutral-200 text-neutral-500"
+                revealed ? "bg-black text-white active:scale-[0.98]" : "bg-neutral-200 text-neutral-500"
               }`}
             >
               Next
@@ -264,6 +308,7 @@ export default function WordImposter() {
           </section>
         )}
 
+        {/* POST-ROUND REVEAL */}
         {started && finished && (
           <section className="space-y-5">
             <div className="rounded-2xl border border-neutral-200 p-4">
@@ -272,73 +317,37 @@ export default function WordImposter() {
                 <span className="text-neutral-500">First player:</span>{" "}
                 <strong>{players[firstPlayerIndex]}</strong>
               </p>
+              <p className="text-sm text-neutral-500 mt-1">
+                {imposterCount} imposter{imposterCount === 1 ? "" : "s"} hidden among you.
+              </p>
             </div>
 
-{/* INITIAL START (only before the first start) */}
-{!timerRunning && !paused && remaining > 0 && (
-  <button
-    onClick={startTimer}
-    className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
-  >
-    Start Timer ({formatTime(remaining)})
-  </button>
-)}
-
-{/* TIMER CARD — stays visible when running OR paused */}
-{(timerRunning || paused) && (
-  <div className="rounded-2xl border border-neutral-200 p-4 text-center">
-    <p className="text-sm text-neutral-500">
-      {paused ? "Paused" : "Time remaining"}
-    </p>
-    <p className="text-4xl font-bold tracking-tight">{formatTime(remaining)}</p>
-
-    <div className="flex gap-3 mt-3">
-      {paused ? (
-        <button
-          onClick={startTimer} // resume
-          className="flex-1 rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
-        >
-          Resume
-        </button>
-      ) : (
-        <button
-          onClick={pauseTimer}
-          className="flex-1 rounded-xl bg-neutral-100 px-4 py-3 text-base font-semibold active:scale-[0.98]"
-        >
-          Pause
-        </button>
-      )}
-
-      <button
-        onClick={stopTimer}
-        className="flex-1 rounded-xl bg-neutral-100 px-4 py-3 text-base font-semibold active:scale-[0.98]"
-      >
-        Stop
-      </button>
-    </div>
-  </div>
-)}
-
-{/* TIME'S UP */}
-{!timerRunning && !paused && remaining <= 0 && (
-  <div className="space-y-3 text-center">
-    <p className="text-lg font-semibold">⏰ Time up! Vote!</p>
-    {!showImposters ? (
-      <button
-        onClick={revealImposters}
-        className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
-      >
-        Reveal Imposter
-      </button>
-    ) : (
-      <div className="rounded-2xl border border-neutral-200 p-4">
-        <p className="text-base">
-          The imposter was: <strong>{players[imposterIndex]}</strong> 🕵️‍♂️
-        </p>
-      </div>
-    )}
-  </div>
-)}
+            {!showImposters ? (
+              <button
+                onClick={() => setShowImposters(true)}
+                className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
+              >
+                Reveal Imposter{imposterCount === 1 ? "" : "s"}
+              </button>
+            ) : (
+              <div className="rounded-2xl border border-neutral-200 p-4 text-left">
+                <p className="text-base font-medium mb-2">
+                  The imposter{imposterCount === 1 ? " was" : "s were"}:
+                </p>
+                <ul className="list-disc pl-5 space-y-1">
+                  {Array.from(imposters).map((idx) => (
+                    <li key={idx}>
+                      <strong>{players[idx]}</strong> 🕵️‍♂️
+                    </li>
+                  ))}
+                </ul>
+                {stealthImposters && imposterWord && (
+                  <p className="text-sm text-neutral-500 mt-3">
+                    (Stealth mode: imposters saw “{imposterWord}”, civilians saw “{secretWord}”.)
+                  </p>
+                )}
+              </div>
+            )}
 
             <button
               onClick={resetGame}
@@ -348,9 +357,8 @@ export default function WordImposter() {
             </button>
           </section>
         )}
-
-        <div className="h-6" />
       </div>
     </div>
   );
 }
+
