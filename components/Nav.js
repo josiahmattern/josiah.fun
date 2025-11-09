@@ -4,7 +4,7 @@ export default function Nav() {
   return (
     <nav className="flex justify-between items-center px-6 py-4 border-b border-neutral-200">
       <Link href="/" className="text-lg font-semibold tracking-tight">
-        josiah.fun
+        games.josiah.digital
       </Link>
       <ul className="flex gap-6 text-sm font-medium">
         <li>

@@ -2,7 +2,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 
 export default function WordImposter() {
-  // Load words from /public/words.txt
   const [wordList, setWordList] = useState([]);
   const [wordsLoaded, setWordsLoaded] = useState(false);
 
@@ -21,7 +20,6 @@ export default function WordImposter() {
     loadWords();
   }, []);
 
-  // Inputs (persisted)
   const [namesInput, setNamesInput] = useState(
     () => (typeof window !== "undefined" && localStorage.getItem("wi:names")) || ""
   );
@@ -42,19 +40,16 @@ export default function WordImposter() {
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem("wi:names", namesInput);
   }, [namesInput]);
-
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem("wi:imps", String(imposterCountInput));
   }, [imposterCountInput]);
-
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem("wi:stealth", stealthImposters ? "1" : "0");
   }, [stealthImposters]);
 
-  // Game state
   const [players, setPlayers] = useState([]);
   const [secretWord, setSecretWord] = useState("");
-  const [imposterWord, setImposterWord] = useState(""); // used only in stealth mode
+  const [imposterWord, setImposterWord] = useState("");
   const [imposters, setImposters] = useState(new Set());
   const [firstPlayerIndex, setFirstPlayerIndex] = useState(-1);
 
@@ -65,7 +60,6 @@ export default function WordImposter() {
   const [finished, setFinished] = useState(false);
   const [showImposters, setShowImposters] = useState(false);
 
-  // Double-tap reveal state
   const [confirmingReveal, setConfirmingReveal] = useState(false);
   const confirmTimerRef = useRef(null);
 
@@ -99,11 +93,9 @@ export default function WordImposter() {
     const maxImps = Math.max(1, Math.min(imposterCountInput || 1, names.length - 1));
     const impSet = chooseImposters(names.length, maxImps);
 
-    // First player not an imposter
     let first = Math.floor(Math.random() * names.length);
     while (impSet.has(first)) first = Math.floor(Math.random() * names.length);
 
-    // If stealth mode, pick an imposter word different from the civilian one
     let impWord = "";
     if (stealthImposters && maxImps > 0) {
       do {
@@ -135,24 +127,20 @@ export default function WordImposter() {
     if (isImp && !stealthImposters) {
       setMessage("IMPOSTER");
     } else if (isImp && stealthImposters) {
-      setMessage(imposterWord || "IMPOSTER"); // safety fallback
+      setMessage(imposterWord || "IMPOSTER");
     } else {
       setMessage(secretWord);
     }
     setRevealed(true);
   }, [revealed, i, imposters, stealthImposters, imposterWord, secretWord]);
 
-  // Double-tap handler
   const handleRevealPress = useCallback(() => {
     if (revealed) return;
 
-    // First tap -> arm
     if (!confirmingReveal) {
       setConfirmingReveal(true);
       setMessage("Tap again to reveal");
-      if (confirmTimerRef.current) {
-        clearTimeout(confirmTimerRef.current);
-      }
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       confirmTimerRef.current = setTimeout(() => {
         setConfirmingReveal(false);
         setMessage("");
@@ -161,11 +149,8 @@ export default function WordImposter() {
       return;
     }
 
-    // Second tap within window -> reveal
-    if (confirmTimerRef.current) {
-      clearTimeout(confirmTimerRef.current);
-      confirmTimerRef.current = null;
-    }
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    confirmTimerRef.current = null;
     setConfirmingReveal(false);
     actuallyReveal();
   }, [confirmingReveal, revealed, actuallyReveal]);
@@ -204,70 +189,69 @@ export default function WordImposter() {
     }
   }, []);
 
-  const revealImposters = useCallback(() => setShowImposters(true), []);
-
   const imposterCount = imposters.size;
 
   return (
-    <div className="min-h-screen w-full bg-white text-neutral-900 flex items-center justify-center px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-6">
+    <div className="min-h-screen bg-base-100 text-base-content flex items-center justify-center px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-6">
       <div className="w-full max-w-md">
         <header className="mb-4">
           <h1 className="text-3xl font-bold tracking-tight">Word Imposter</h1>
-          <p className="text-sm text-neutral-500 my-1">
-            Play <span className="font-bold"> 2 to 3</span> rounds for a full game.
+          <p className="text-sm text-base-content/70 my-1">
+            Play <span className="font-bold">2 to 3</span> rounds for a full game.
           </p>
         </header>
 
         {/* SETUP */}
         {!started && (
           <section className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Enter player names (comma or newline)</label>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text mb-2">Enter player names (comma or newline)</span>
+              </label>
               <textarea
                 rows={5}
                 value={namesInput}
                 onChange={(e) => setNamesInput(e.target.value)}
-                className="w-full rounded-xl border border-neutral-300 p-3 text-base outline-none focus:ring-2 focus:ring-black/10"
+                className="textarea w-full"
                 placeholder="e.g. Alex, Sam, Jamie…"
-                inputMode="text"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Number of imposters</label>
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Number of imposters</span>
+                </label>
                 <input
                   type="number"
                   min={1}
                   value={imposterCountInput}
                   onChange={(e) => setImposterCountInput(Math.max(1, Number(e.target.value) || 1))}
-                  className="w-full rounded-xl border border-neutral-300 p-3 text-base outline-none focus:ring-2 focus:ring-black/10"
-                  inputMode="numeric"
+                  className="input input-bordered w-full"
                 />
               </div>
 
               <button
                 onClick={startGame}
                 disabled={!canStart}
-                className={`rounded-xl px-4 py-3 text-base font-semibold transition w-full sm:w-auto ${
-                  canStart ? "bg-black text-white active:scale-[0.98]" : "bg-neutral-200 text-neutral-500"
+                className={`btn w-full sm:w-auto ${
+                  canStart ? "btn-primary" : "btn-disabled"
                 }`}
               >
                 {wordsLoaded ? "Start" : "Loading words…"}
               </button>
             </div>
 
-            <label className="flex items-center gap-2 text-sm">
+            <label className="label cursor-pointer justify-start gap-2">
               <input
                 type="checkbox"
                 checked={stealthImposters}
                 onChange={(e) => setStealthImposters(e.target.checked)}
-                className="h-4 w-4 rounded border-neutral-300"
+                className="checkbox checkbox-primary"
               />
-              <span>Stealth imposters (imposters also get a word)</span>
+              <span className="label-text">Stealth imposters (imposters also get a word)</span>
             </label>
 
-            <p className="text-xs text-neutral-500">Need at least 3 players.</p>
           </section>
         )}
 
@@ -276,21 +260,25 @@ export default function WordImposter() {
           <section className="space-y-5">
             <div className="flex items-baseline justify-between">
               <h2 className="text-xl font-semibold">Double-tap the player to reveal</h2>
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-base-content/70">
                 {i + 1} / {players.length}
               </p>
             </div>
 
             <button
               onClick={handleRevealPress}
-              className="w-full rounded-2xl border border-neutral-300 p-5 text-2xl font-bold active:scale-[0.98]"
+              className="btn btn-outline btn-lg w-full font-bold"
             >
               {players[i]}
             </button>
 
             <p
               className={`min-h-[2.25rem] text-center text-xl ${
-                revealed ? "font-semibold" : confirmingReveal ? "text-amber-600" : "text-neutral-400"
+                revealed
+                  ? "font-semibold text-primary"
+                  : confirmingReveal
+                  ? "text-warning"
+                  : "text-base-content/60"
               }`}
             >
               {revealed ? message : message || "—"}
@@ -299,9 +287,7 @@ export default function WordImposter() {
             <button
               onClick={nextPlayer}
               disabled={!revealed}
-              className={`w-full rounded-xl px-4 py-3 text-base font-semibold transition ${
-                revealed ? "bg-black text-white active:scale-[0.98]" : "bg-neutral-200 text-neutral-500"
-              }`}
+              className={`btn w-full ${revealed ? "btn-primary" : "btn-disabled"}`}
             >
               Next
             </button>
@@ -311,13 +297,13 @@ export default function WordImposter() {
         {/* POST-ROUND REVEAL */}
         {started && finished && (
           <section className="space-y-5">
-            <div className="rounded-2xl border border-neutral-200 p-4">
-              <p className="text-base">All players have been revealed.</p>
-              <p className="text-base">
-                <span className="text-neutral-500">First player:</span>{" "}
+            <div className="card border border-base-300 bg-base-200 p-4">
+              <p>All players have been revealed.</p>
+              <p>
+                <span className="text-base-content/70">First player:</span>{" "}
                 <strong>{players[firstPlayerIndex]}</strong>
               </p>
-              <p className="text-sm text-neutral-500 mt-1">
+              <p className="text-sm text-base-content/60 mt-1">
                 {imposterCount} imposter{imposterCount === 1 ? "" : "s"} hidden among you.
               </p>
             </div>
@@ -325,16 +311,16 @@ export default function WordImposter() {
             {!showImposters ? (
               <button
                 onClick={() => setShowImposters(true)}
-                className="w-full rounded-xl bg-black text-white px-4 py-3 text-base font-semibold active:scale-[0.98]"
+                className="btn btn-primary w-full"
               >
                 Reveal Imposter{imposterCount === 1 ? "" : "s"}
               </button>
             ) : (
-              <div className="rounded-2xl border border-neutral-200 p-4 text-left">
-                <p className="text-base font-medium mb-2">
+              <div className="card border border-base-300 bg-base-200 p-4 text-left">
+                <p className="font-medium mb-2">
                   The imposter{imposterCount === 1 ? " was" : "s were"}:
                 </p>
-                <ul className="list-disc pl-5 space-y-1">
+                <ul className="space-y-1">
                   {Array.from(imposters).map((idx) => (
                     <li key={idx}>
                       <strong>{players[idx]}</strong> 🕵️‍♂️
@@ -342,17 +328,14 @@ export default function WordImposter() {
                   ))}
                 </ul>
                 {stealthImposters && imposterWord && (
-                  <p className="text-sm text-neutral-500 mt-3">
+                  <p className="text-sm text-base-content/60 mt-3">
                     (Stealth mode: imposters saw “{imposterWord}”, civilians saw “{secretWord}”.)
                   </p>
                 )}
               </div>
             )}
 
-            <button
-              onClick={resetGame}
-              className="w-full rounded-xl bg-neutral-100 px-4 py-3 text-base font-semibold active:scale-[0.98]"
-            >
+            <button onClick={resetGame} className="btn btn-outline w-full">
               Reset
             </button>
           </section>
