@@ -1,6 +1,6 @@
 "use client";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 export default function GameUI({
   myPlayerId,
@@ -20,6 +20,9 @@ export default function GameUI({
   const isHost = players.find((p) => p.id === myPlayerId)?.isHost;
 
   const alivePlayers = players.filter((p) => p.lives > 0);
+
+  // Safety check for undefined gameState
+  if (!gameState) return <div className="p-10 text-center">Loading...</div>;
 
   useEffect(() => {
     if (gameState.status === "playing" && isMyTurn) {
@@ -41,11 +44,11 @@ export default function GameUI({
   const renderLives = (count) => {
     const safeCount = Math.max(0, Math.min(count, 3));
     return (
-      <div className="flex gap-0.5 justify-center mt-1">
+      <div className="flex gap-0.5 justify-center mt-0.5">
         {[...Array(3)].map((_, i) => (
           <span
             key={i}
-            className={`text-[10px] ${
+            className={`text-[8px] md:text-[10px] drop-shadow-sm ${
               i < safeCount ? "opacity-100" : "opacity-20 grayscale"
             }`}
           >
@@ -80,22 +83,19 @@ export default function GameUI({
             </h2>
             <div className="text-lg opacity-60 mb-8 font-medium">
               Share the code{" "}
-              <span className="text-primary font-bold">{roomCode}</span> to
-              invite friends
+              <span className="text-primary font-bold">{roomCode}</span>
             </div>
 
-            <div className="flex items-center flex-wrap gap-4 justify-center mb-10">
+            {/* Minimal Lobby List */}
+            <div className="flex flex-wrap gap-8 justify-center mb-10">
               {players.map((p) => (
-                <div
-                  key={p.id}
-                  className="card bg-base-100 px-6 py-4 shadow-sm animate-pop border border-base-300"
-                >
-                  <span className="font-bold text-lg">{p.name}</span>
-                  {p.id === myPlayerId && (
-                    <span className="badge badge-xs badge-primary mt-1">
-                      YOU
-                    </span>
-                  )}
+                <div key={p.id} className="text-center animate-pop">
+                  {/* If it's ME, use Secondary color, otherwise default */}
+                  <div
+                    className={`font-bold text-xl ${p.id === myPlayerId ? "text-secondary scale-110" : "text-base-content"}`}
+                  >
+                    {p.name}
+                  </div>
                 </div>
               ))}
             </div>
@@ -123,13 +123,16 @@ export default function GameUI({
             {/* 1. TOP STATUS BAR */}
             <div className="text-center pt-6 z-20 shrink-0">
               {isMyTurn ? (
-                <div className="inline-block bg-primary text-primary-content px-6 py-2 rounded-full font-black text-xl animate-bounce shadow-lg">
-                  IT'S YOUR TURN!
+                <div className="text-2xl md:text-3xl font-black text-primary animate-pulse drop-shadow-sm">
+                  YOUR TURN!
                 </div>
               ) : (
-                <div className="inline-block bg-base-100 px-6 py-2 rounded-full font-bold shadow-sm opacity-80">
+                <div className="text-lg md:text-xl font-bold opacity-60">
                   Waiting for{" "}
-                  <span className="text-primary">{currentPlayer?.name}</span>...
+                  <span className="text-base-content opacity-100">
+                    {currentPlayer?.name}
+                  </span>
+                  ...
                 </div>
               )}
             </div>
@@ -160,6 +163,7 @@ export default function GameUI({
                 const y = 50 + radius * Math.sin(angle);
 
                 const isActive = p.id === gameState.currentPlayerId;
+                const isMe = p.id === myPlayerId;
 
                 return (
                   <div
@@ -172,30 +176,33 @@ export default function GameUI({
                       zIndex: isActive ? 20 : 5,
                     }}
                   >
-                    {/* NAME CARD (Replaces Avatar) */}
+                    {/* MINIMAL NAME DISPLAY */}
                     <div
-                      className={`relative px-4 py-2 rounded-xl shadow-lg border-2 flex flex-col items-center transition-all duration-300 ${
+                      className={`flex flex-col items-center transition-all duration-300 ${
                         isActive
-                          ? "bg-neutral text-neutral-content border-primary scale-125 ring-4 ring-primary/30 z-50"
-                          : "bg-base-100/90 border-base-200 backdrop-blur-sm scale-100"
+                          ? "scale-125 z-50 drop-shadow-md"
+                          : "scale-100 opacity-70"
                       }`}
                     >
-                      {/* Name */}
+                      {/* Name Text Logic: 
+                          Active = Primary Color & Huge
+                          Me = Secondary Color
+                          Others = Base Color
+                      */}
                       <span
-                        className={`font-black uppercase tracking-wide whitespace-nowrap ${isActive ? "text-sm md:text-base" : "text-xs md:text-sm"}`}
+                        className={`uppercase tracking-wide whitespace-nowrap ${
+                          isActive
+                            ? "font-black text-primary text-lg md:text-xl"
+                            : isMe
+                              ? "font-bold text-secondary text-base md:text-lg"
+                              : "font-bold text-base-content text-sm md:text-base"
+                        }`}
                       >
                         {p.name}
                       </span>
 
-                      {/* Lives */}
+                      {/* Lives (Hearts) */}
                       {renderLives(p.lives)}
-
-                      {/* "YOU" Badge */}
-                      {p.id === myPlayerId && (
-                        <span className="absolute -top-3 -right-2 bg-accent text-accent-content text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm border border-base-100">
-                          ME
-                        </span>
-                      )}
                     </div>
                   </div>
                 );

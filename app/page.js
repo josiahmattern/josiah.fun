@@ -29,20 +29,18 @@ export default function Home() {
             play innerword
             <PlayIcon />
           </Link>
-          <a
-            href="https://josiah.digital"
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-ghost px-6 text-sm sm:text-base"
-          >
-            about
-          </a>
         </div>
       </section>
 
       {/* FOOTER */}
       <footer className="mt-12 text-center text-xs sm:text-sm text-base-content/60">
-        © {new Date().getFullYear()} josiah.digital
+        © {new Date().getFullYear()}
+        <a
+          href="https://josiah.digital"
+          className="ml-1 underline hover:text-primary transition-colors"
+        >
+          josiah.digital
+        </a>
       </footer>
     </main>
   );

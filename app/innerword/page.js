@@ -55,7 +55,7 @@ export default function InnerWordPage() {
     setIsConnecting(true);
 
     const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const fullId = `bombparty-v2-${code}`;
+    const fullId = `innerword-v2-${code}`;
 
     const peer = new PeerLibrary.current(fullId, { debug: 1 });
     peerInstance.current = peer;
@@ -86,7 +86,7 @@ export default function InnerWordPage() {
     if (joinCode.length !== 4) return alert("Code must be 4 chars");
 
     setIsConnecting(true);
-    const fullHostId = `bombparty-v2-${joinCode.toUpperCase()}`;
+    const fullHostId = `innerword-v2-${joinCode.toUpperCase()}`;
     const peer = new PeerLibrary.current();
     peerInstance.current = peer;
 
@@ -293,7 +293,7 @@ export default function InnerWordPage() {
       <div className="min-h-screen flex items-center justify-center bg-base-100 p-4 relative">
         {/* BACK HOME BUTTON: Moved to absolute position top-right */}
         <div className="absolute top-4 right-4">
-          <div className="badge badge-lg badge-neutral font-mono p-4 hover:scale-105 transition-transform">
+          <div className="badge badge-lg badge-neutral font-mono p-4">
             <Link href="/" className="hover:text-primary transition-colors">
               BACK HOME
             </Link>
