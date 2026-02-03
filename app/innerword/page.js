@@ -1,174 +1,140 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import GameUI from "./components/GameUI";
+import Link from "next/link";
 
 export default function InnerWordPage() {
-  // --- UI STATE ---
-  const [hasMounted, setHasMounted] = useState(false); // Fixes Next.js hydration errors
-  const [view, setView] = useState("menu"); // menu, join, game
-  const [username, setUsername] = useState(""); // Initialize with empty string
+  const [hasMounted, setHasMounted] = useState(false);
+  const [view, setView] = useState("menu");
+  const [username, setUsername] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [statusMsg, setStatusMsg] = useState("");
   const [isPeerLoaded, setIsPeerLoaded] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
   // --- GAME STATE ---
   const [myPlayerId, setMyPlayerId] = useState("");
-  const [hostId, setHostId] = useState(""); // The 4-letter code
+  const [hostId, setHostId] = useState("");
   const [players, setPlayers] = useState([]);
   const [gameState, setGameState] = useState({
     status: "lobby",
     prompt: "...",
-    timer: 15,
     usedWords: [],
+    currentPlayerId: null,
+    lastExplodedPlayerId: null,
   });
 
   // --- REFS ---
   const peerInstance = useRef(null);
   const PeerLibrary = useRef(null);
-  const connRef = useRef([]); // Host: Array of connections
-  const hostConnRef = useRef(null); // Joiner: Connection to host
+  const connRef = useRef([]);
+  const hostConnRef = useRef(null);
 
-  // 1. MOUNT & LOAD PEERJS
+  const playersRef = useRef([]);
+  const gameRef = useRef(gameState);
+  const timerRef = useRef({ elapsed: 0, limit: 0 });
+
+  useEffect(() => {
+    playersRef.current = players;
+  }, [players]);
+  useEffect(() => {
+    gameRef.current = gameState;
+  }, [gameState]);
+
+  // 1. SETUP
   useEffect(() => {
     setHasMounted(true);
     import("peerjs").then((module) => {
       PeerLibrary.current = module.default;
       setIsPeerLoaded(true);
     });
-
-    // Cleanup on unmount
-    return () => {
-      if (peerInstance.current) peerInstance.current.destroy();
-    };
   }, []);
 
   // 2. HOST LOGIC
   const handleHost = () => {
-    if (!username.trim()) return alert("Please enter a name");
-    if (!PeerLibrary.current) return;
-
+    if (!username.trim()) return alert("Enter name");
     setIsConnecting(true);
 
-    // Generate 4-letter code
     const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const fullId = `bombparty-${code}`;
+    const fullId = `bombparty-v2-${code}`;
 
-    const peer = new PeerLibrary.current(fullId);
+    const peer = new PeerLibrary.current(fullId, { debug: 1 });
     peerInstance.current = peer;
 
     peer.on("open", (id) => {
       setHostId(code);
       setMyPlayerId(id);
-      setPlayers([{ id, name: username, score: 0, isHost: true }]);
+      const initialMe = { id, name: username, lives: 3, isHost: true };
+      setPlayers([initialMe]);
       setView("game");
       setIsConnecting(false);
     });
 
     peer.on("connection", (conn) => {
       connRef.current.push(conn);
-
-      conn.on("open", () => {
-        // Send current players to the new joiner
-        // We use a functional update inside the event to get the FRESH 'players' state
-        // (This is tricky in React closures, so we sync simpler: ask joiner to send name first)
-      });
-
-      conn.on("data", (data) => {
-        handleHostData(data, conn.peer, conn);
-      });
+      conn.on("data", (data) => handleHostData(data, conn.peer));
     });
 
     peer.on("error", (err) => {
       setIsConnecting(false);
-      if (err.type === "unavailable-id")
-        handleHost(); // Retry if code taken
-      else alert("Connection Error: " + err.type);
+      alert(`Host Error: ${err.type}`);
     });
   };
 
   // 3. JOIN LOGIC
   const handleJoin = () => {
-    if (!username.trim()) return alert("Please enter a name");
-    if (joinCode.length !== 4) return alert("Code must be 4 letters");
-    if (!PeerLibrary.current) return;
+    if (!username.trim()) return alert("Enter name");
+    if (joinCode.length !== 4) return alert("Code must be 4 chars");
 
     setIsConnecting(true);
-
-    const peer = new PeerLibrary.current(); // Random ID for joiner
+    const fullHostId = `bombparty-v2-${joinCode.toUpperCase()}`;
+    const peer = new PeerLibrary.current();
     peerInstance.current = peer;
 
     peer.on("open", (id) => {
       setMyPlayerId(id);
-      const fullHostId = `bombparty-${joinCode.toUpperCase()}`;
       const conn = peer.connect(fullHostId);
       hostConnRef.current = conn;
 
       conn.on("open", () => {
         setView("game");
         setIsConnecting(false);
-        // Handshake: Tell host my name
+        setHostId(joinCode.toUpperCase());
         conn.send({ type: "JOIN", name: username });
       });
 
       conn.on("data", (data) => handleClientData(data));
       conn.on("error", () => {
         setIsConnecting(false);
-        alert("Could not connect to host.");
-      });
-      conn.on("close", () => {
-        alert("Host disconnected");
-        window.location.reload();
+        alert("Connection Failed");
       });
     });
   };
 
   // 4. DATA HANDLERS
-  const handleHostData = (data, senderId, conn) => {
+  const handleHostData = (data, senderId) => {
     if (data.type === "JOIN") {
       setPlayers((prev) => {
-        // Prevent duplicate joins
         if (prev.find((p) => p.id === senderId)) return prev;
-
         const newPlayers = [
           ...prev,
-          { id: senderId, name: data.name, score: 0, isHost: false },
+          { id: senderId, name: data.name, lives: 3, isHost: false },
         ];
-        // Broadcast new list to everyone (including the new guy)
         broadcast({ type: "SYNC_PLAYERS", players: newPlayers });
         return newPlayers;
       });
     }
 
     if (data.type === "GUESS") {
-      setGameState((prev) => {
-        const word = data.word;
-        // Host Validates Word Here
-        if (
-          word.includes(prev.prompt.toLowerCase()) &&
-          !prev.usedWords.includes(word)
-        ) {
-          // Update Score
-          setPlayers((currPlayers) => {
-            const updated = currPlayers.map((p) =>
-              p.id === senderId ? { ...p, score: p.score + 1 } : p,
-            );
-            broadcast({ type: "SYNC_PLAYERS", players: updated });
-            return updated;
-          });
+      const { word } = data;
+      const current = gameRef.current;
+      if (senderId !== current.currentPlayerId) return;
 
-          // Update Game State
-          const newState = {
-            ...prev,
-            timer: 15, // Reset timer
-            prompt: generatePrompt(),
-            usedWords: [word, ...prev.usedWords],
-          };
-          broadcast({ type: "SYNC_STATE", state: newState });
-          return newState;
-        }
-        return prev;
-      });
+      if (
+        word.includes(current.prompt.toLowerCase()) &&
+        !current.usedWords.includes(word)
+      ) {
+        passTurn(word);
+      }
     }
   };
 
@@ -177,10 +143,8 @@ export default function InnerWordPage() {
     if (data.type === "SYNC_STATE") setGameState(data.state);
   };
 
-  // 5. UTILS & GAME LOOP
-  const broadcast = (msg) => {
-    connRef.current.forEach((c) => c.open && c.send(msg));
-  };
+  // 5. TURN LOGIC
+  const getRandomLimit = () => Math.floor(Math.random() * 5000) + 3000;
 
   const generatePrompt = () => {
     const chars = [
@@ -193,83 +157,161 @@ export default function InnerWordPage() {
       "ver",
       "all",
       "and",
+      "que",
+      "ght",
+      "ack",
     ];
     return chars[Math.floor(Math.random() * chars.length)];
   };
 
-  const onStartGame = () => {
+  const getNextAlivePlayerId = (currentId) => {
+    const list = playersRef.current;
+    if (list.length === 0) return null;
+    let idx = list.findIndex((p) => p.id === currentId);
+    if (idx === -1) idx = 0;
+    for (let i = 1; i <= list.length; i++) {
+      const nextIdx = (idx + i) % list.length;
+      if (list[nextIdx].lives > 0) return list[nextIdx].id;
+    }
+    return null;
+  };
+
+  const passTurn = (wordToAdd = null) => {
+    const nextId = getNextAlivePlayerId(gameRef.current.currentPlayerId);
+    const aliveCount = playersRef.current.filter((p) => p.lives > 0).length;
+    if (aliveCount <= 1 && playersRef.current.length > 1) {
+      endGame();
+      return;
+    }
+
+    timerRef.current = { elapsed: 0, limit: getRandomLimit() };
+
     const newState = {
+      ...gameRef.current,
       status: "playing",
+      currentPlayerId: nextId,
       prompt: generatePrompt(),
-      timer: 15,
-      usedWords: [],
+      lastExplodedPlayerId: null,
+      usedWords: wordToAdd
+        ? [wordToAdd, ...gameRef.current.usedWords]
+        : gameRef.current.usedWords,
     };
+
     setGameState(newState);
     broadcast({ type: "SYNC_STATE", state: newState });
   };
 
-  const onSubmitGuess = (word) => {
-    // If Host, handle locally. If Client, send to Host.
-    const me = players.find((p) => p.id === myPlayerId);
-    if (me?.isHost) {
-      handleHostData({ type: "GUESS", word }, myPlayerId, null);
-    } else {
-      hostConnRef.current?.send({ type: "GUESS", word });
+  const explodeCurrentPlayer = () => {
+    const currentId = gameRef.current.currentPlayerId;
+    if (!currentId) return;
+
+    const newPlayers = playersRef.current.map((p) =>
+      p.id === currentId ? { ...p, lives: p.lives - 1 } : p,
+    );
+    setPlayers(newPlayers);
+    broadcast({ type: "SYNC_PLAYERS", players: newPlayers });
+
+    const aliveCount = newPlayers.filter((p) => p.lives > 0).length;
+    if (aliveCount <= 1 && newPlayers.length > 1) {
+      endGame();
+      return;
     }
+
+    const nextId = getNextAlivePlayerId(currentId);
+    timerRef.current = { elapsed: 0, limit: getRandomLimit() };
+
+    const newState = {
+      ...gameRef.current,
+      currentPlayerId: nextId,
+      prompt: generatePrompt(),
+      lastExplodedPlayerId: currentId,
+    };
+
+    setGameState(newState);
+    broadcast({ type: "SYNC_STATE", state: newState });
   };
 
-  // Host Timer Loop
+  const endGame = () => {
+    const newState = { ...gameRef.current, status: "gameover" };
+    setGameState(newState);
+    broadcast({ type: "SYNC_STATE", state: newState });
+  };
+
+  const onStartGame = () => {
+    const resetPlayers = playersRef.current.map((p) => ({ ...p, lives: 3 }));
+    setPlayers(resetPlayers);
+    broadcast({ type: "SYNC_PLAYERS", players: resetPlayers });
+
+    const starter =
+      resetPlayers[Math.floor(Math.random() * resetPlayers.length)].id;
+    timerRef.current = { elapsed: 0, limit: getRandomLimit() };
+
+    const newState = {
+      status: "playing",
+      prompt: generatePrompt(),
+      usedWords: [],
+      currentPlayerId: starter,
+      lastExplodedPlayerId: null,
+    };
+
+    setGameState(newState);
+    broadcast({ type: "SYNC_STATE", state: newState });
+  };
+
   useEffect(() => {
     if (!myPlayerId || !players.find((p) => p.id === myPlayerId)?.isHost)
       return;
     if (gameState.status !== "playing") return;
 
     const interval = setInterval(() => {
-      setGameState((prev) => {
-        if (prev.timer <= 0) {
-          const overState = { ...prev, status: "gameover" };
-          broadcast({ type: "SYNC_STATE", state: overState });
-          return overState;
-        }
-        const nextState = { ...prev, timer: prev.timer - 1 };
-        broadcast({ type: "SYNC_STATE", state: nextState });
-        return nextState;
-      });
-    }, 1000);
+      timerRef.current.elapsed += 100;
+      if (timerRef.current.elapsed >= timerRef.current.limit) {
+        explodeCurrentPlayer();
+      }
+    }, 100);
+
     return () => clearInterval(interval);
   }, [gameState.status, myPlayerId]);
 
-  // --- RENDER ---
-  // Prevent hydration mismatch
-  if (!hasMounted) return <div className="min-h-screen bg-base-100"></div>;
+  const broadcast = (msg) => {
+    connRef.current.forEach((c) => c.open && c.send(msg));
+  };
 
-  // VIEW: MAIN MENU
+  const onSubmitGuess = (word) => {
+    if (players.find((p) => p.id === myPlayerId)?.isHost) {
+      handleHostData({ type: "GUESS", word }, myPlayerId);
+    } else {
+      hostConnRef.current?.send({ type: "GUESS", word });
+    }
+  };
+
+  if (!hasMounted) return null;
+
   if (view === "menu") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-base-100 p-4">
+      // Added 'relative' to the container so absolute positioning works
+      <div className="min-h-screen flex items-center justify-center bg-base-100 p-4 relative">
+        {/* BACK HOME BUTTON: Moved to absolute position top-right */}
+        <div className="absolute top-4 right-4">
+          <div className="badge badge-lg badge-neutral font-mono p-4 hover:scale-105 transition-transform">
+            <Link href="/" className="hover:text-primary transition-colors">
+              BACK HOME
+            </Link>
+          </div>
+        </div>
+
         <div className="card w-full max-w-sm bg-base-200 shadow-xl border-2 border-base-300">
           <div className="card-body items-center text-center space-y-4">
             <h1 className="text-4xl font-black text-primary tracking-tighter">
-              BOMB PARTY
+              INNERWORD
             </h1>
-            <p className="text-sm opacity-60 font-bold uppercase tracking-widest">
-              Multiplayer
-            </p>
-
-            <div className="form-control w-full">
-              <label className="label">
-                <span className="label-text font-bold">Your Name</span>
-              </label>
-              <input
-                type="text"
-                className="input input-bordered w-full text-center text-lg font-bold"
-                placeholder="e.g. SpeedTyper"
-                value={username || ""}
-                onChange={(e) => setUsername(e.target.value)}
-                maxLength={12}
-              />
-            </div>
-
+            <input
+              className="input input-bordered w-full text-center text-lg font-bold"
+              placeholder="Your Name"
+              value={username || ""}
+              onChange={(e) => setUsername(e.target.value)}
+              maxLength={12}
+            />
             <div className="w-full space-y-2 pt-2">
               <button
                 onClick={handleHost}
@@ -282,15 +324,13 @@ export default function InnerWordPage() {
                   "Host Game"
                 )}
               </button>
-
               <div className="divider">OR</div>
-
               <div className="join w-full">
                 <input
-                  className="input input-bordered join-item w-full text-center font-mono uppercase tracking-widest"
+                  className="input input-bordered join-item w-full text-center uppercase"
                   placeholder="CODE"
                   maxLength={4}
-                  value={joinCode || ""}
+                  value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
                 />
                 <button
@@ -308,25 +348,14 @@ export default function InnerWordPage() {
     );
   }
 
-  // VIEW: LOBBY & GAME (Handled by GameUI)
+  // --- FIXED: Pass roomCode and remove floating div ---
   return (
     <div className="min-h-screen bg-base-100 p-4 flex justify-center">
-      {/* Room Code Badge */}
-      {gameState.status === "lobby" && (
-        <div className="fixed top-4 left-4 z-50">
-          <div className="badge badge-lg badge-neutral font-mono shadow-lg p-4">
-            Code:{" "}
-            <span className="font-black ml-2 text-primary select-all">
-              {hostId || "..."}
-            </span>
-          </div>
-        </div>
-      )}
-
       <GameUI
         myPlayerId={myPlayerId}
         players={players}
         gameState={gameState}
+        roomCode={hostId} // <-- Passed as Prop
         onSubmitGuess={onSubmitGuess}
         onStartGame={onStartGame}
       />

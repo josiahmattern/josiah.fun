@@ -1,10 +1,12 @@
 "use client";
-import { useEffect, useRef } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
 export default function GameUI({
   myPlayerId,
   players,
-  gameState, // { status, prompt, timer, usedWords }
+  gameState,
+  roomCode,
   onSubmitGuess,
   onStartGame,
 }) {
@@ -12,91 +14,241 @@ export default function GameUI({
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
 
-  // Auto-focus input when playing
-  useEffect(() => {
-    if (gameState.status === "playing") inputRef.current?.focus();
-  }, [gameState.status, gameState.prompt]);
+  const isMyTurn = gameState.currentPlayerId === myPlayerId;
+  const currentPlayer = players.find((p) => p.id === gameState.currentPlayerId);
+  const myPlayer = players.find((p) => p.id === myPlayerId);
+  const isHost = players.find((p) => p.id === myPlayerId)?.isHost;
 
-  // Auto-scroll sidebar
+  const alivePlayers = players.filter((p) => p.lives > 0);
+
+  useEffect(() => {
+    if (gameState.status === "playing" && isMyTurn) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [gameState.currentPlayerId, isMyTurn, gameState.status]);
+
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [gameState.usedWords]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!inputVal.trim()) return;
+    if (!inputVal.trim() || !isMyTurn) return;
     onSubmitGuess(inputVal.trim().toLowerCase());
     setInputVal("");
   };
 
-  const isHost = players.find((p) => p.id === myPlayerId)?.isHost;
+  const renderLives = (count) => {
+    const safeCount = Math.max(0, Math.min(count, 3));
+    return (
+      <div className="flex gap-0.5 justify-center mt-1">
+        {[...Array(3)].map((_, i) => (
+          <span
+            key={i}
+            className={`text-[10px] ${
+              i < safeCount ? "opacity-100" : "opacity-20 grayscale"
+            }`}
+          >
+            ❤️
+          </span>
+        ))}
+      </div>
+    );
+  };
 
   return (
-    <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6">
-      {/* --- LEFT: GAME AREA --- */}
-      <div className="md:col-span-2 space-y-6">
-        <header className="flex justify-between items-center">
-          <h1 className="text-3xl font-black text-primary">BOMB PARTY</h1>
-          {gameState.status === "playing" && (
-            <div
-              className={`text-5xl font-mono font-black ${gameState.timer <= 3 ? "text-error animate-ping" : ""}`}
-            >
-              {gameState.timer}s
-            </div>
-          )}
+    <div className="w-full grid grid-cols-1 lg:grid-cols-4 gap-6 pb-6 h-[calc(100vh-2rem)]">
+      {/* --- LEFT: GAME AREA (Takes 3/4 width) --- */}
+      <div className="lg:col-span-3 flex flex-col gap-4 h-full relative">
+        {/* HEADER */}
+        <header className="flex justify-between items-center bg-base-100 p-4 rounded-2xl shadow-sm z-10 shrink-0">
+          <h1 className="text-2xl font-black text-primary tracking-tighter">
+            INNERWORD
+          </h1>
+          <div className="badge badge-lg badge-neutral font-mono p-4">
+            <Link href="/" className="hover:text-primary transition-colors">
+              BACK HOME
+            </Link>
+          </div>
         </header>
 
-        {/* WAITING ROOM */}
+        {/* LOBBY VIEW */}
         {gameState.status === "lobby" && (
-          <div className="card bg-base-200 p-10 text-center shadow-lg border-2 border-base-300">
-            <h2 className="text-2xl font-bold mb-2">Waiting for Players...</h2>
-            <p className="opacity-60 mb-6">Share the code on the right!</p>
+          <div className="flex-1 card bg-base-200 shadow-xl border-4 border-base-300 flex flex-col items-center justify-center p-8">
+            <h2 className="text-4xl font-black mb-2 opacity-80">
+              WAITING ROOM
+            </h2>
+            <div className="text-lg opacity-60 mb-8 font-medium">
+              Share the code{" "}
+              <span className="text-primary font-bold">{roomCode}</span> to
+              invite friends
+            </div>
+
+            <div className="flex items-center flex-wrap gap-4 justify-center mb-10">
+              {players.map((p) => (
+                <div
+                  key={p.id}
+                  className="card bg-base-100 px-6 py-4 shadow-sm animate-pop border border-base-300"
+                >
+                  <span className="font-bold text-lg">{p.name}</span>
+                  {p.id === myPlayerId && (
+                    <span className="badge badge-xs badge-primary mt-1">
+                      YOU
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
             {isHost ? (
               <button
                 onClick={onStartGame}
-                className="btn btn-primary btn-lg w-full"
+                disabled={players.length < 2}
+                className="btn btn-primary btn-lg px-12 shadow-xl hover:scale-105 transition-transform"
               >
                 Start Game
               </button>
             ) : (
-              <div className="alert alert-info">
-                Waiting for Host to start...
+              <div className="flex items-center gap-2 text-info font-bold animate-pulse">
+                <span className="loading loading-dots loading-sm"></span>
+                Waiting for Host...
               </div>
             )}
           </div>
         )}
 
-        {/* PLAYING AREA */}
+        {/* GAME VIEW - CIRCULAR LAYOUT */}
         {gameState.status === "playing" && (
-          <div className="space-y-6">
-            <div className="card bg-neutral text-neutral-content py-12 items-center shadow-2xl border-b-8 border-primary">
-              <span className="text-xs uppercase opacity-50 font-bold mb-2">
-                Contains
-              </span>
-              <span className="text-7xl font-black uppercase tracking-widest">
-                {gameState.prompt}
-              </span>
+          <div className="flex-1 relative bg-base-300/50 rounded-3xl border-4 border-base-300 shadow-inner overflow-hidden flex flex-col">
+            {/* 1. TOP STATUS BAR */}
+            <div className="text-center pt-6 z-20 shrink-0">
+              {isMyTurn ? (
+                <div className="inline-block bg-primary text-primary-content px-6 py-2 rounded-full font-black text-xl animate-bounce shadow-lg">
+                  IT'S YOUR TURN!
+                </div>
+              ) : (
+                <div className="inline-block bg-base-100 px-6 py-2 rounded-full font-bold shadow-sm opacity-80">
+                  Waiting for{" "}
+                  <span className="text-primary">{currentPlayer?.name}</span>...
+                </div>
+              )}
             </div>
 
-            <form onSubmit={handleSubmit}>
-              <input
-                ref={inputRef}
-                autoFocus
-                className="input input-bordered input-lg w-full text-center text-3xl font-bold"
-                placeholder="Type here..."
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-              />
-            </form>
+            {/* 2. CIRCULAR ARENA */}
+            <div className="flex-1 relative w-full h-full min-h-[400px]">
+              {/* CENTER: BOMB & PROMPT */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-10 w-64 h-64 rounded-full bg-base-100 shadow-2xl border-4 border-base-200">
+                <div
+                  className={`text-7xl mb-1 transition-transform ${isMyTurn ? "animate-bounce" : ""}`}
+                >
+                  💣
+                </div>
+                <div className="text-[10px] uppercase font-bold opacity-40 tracking-widest">
+                  CONTAINING
+                </div>
+                <div className="text-6xl font-black uppercase tracking-widest text-primary mt-1">
+                  {gameState.prompt}
+                </div>
+              </div>
+
+              {/* PLAYERS ORBIT */}
+              {alivePlayers.map((p, index) => {
+                const total = alivePlayers.length;
+                const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
+                const radius = 38; // Distance from center %
+                const x = 50 + radius * Math.cos(angle);
+                const y = 50 + radius * Math.sin(angle);
+
+                const isActive = p.id === gameState.currentPlayerId;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="absolute flex flex-col items-center justify-center transition-all duration-500"
+                    style={{
+                      left: `${x}%`,
+                      top: `${y}%`,
+                      transform: "translate(-50%, -50%)",
+                      zIndex: isActive ? 20 : 5,
+                    }}
+                  >
+                    {/* NAME CARD (Replaces Avatar) */}
+                    <div
+                      className={`relative px-4 py-2 rounded-xl shadow-lg border-2 flex flex-col items-center transition-all duration-300 ${
+                        isActive
+                          ? "bg-neutral text-neutral-content border-primary scale-125 ring-4 ring-primary/30 z-50"
+                          : "bg-base-100/90 border-base-200 backdrop-blur-sm scale-100"
+                      }`}
+                    >
+                      {/* Name */}
+                      <span
+                        className={`font-black uppercase tracking-wide whitespace-nowrap ${isActive ? "text-sm md:text-base" : "text-xs md:text-sm"}`}
+                      >
+                        {p.name}
+                      </span>
+
+                      {/* Lives */}
+                      {renderLives(p.lives)}
+
+                      {/* "YOU" Badge */}
+                      {p.id === myPlayerId && (
+                        <span className="absolute -top-3 -right-2 bg-accent text-accent-content text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm border border-base-100">
+                          ME
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 3. INPUT AREA */}
+            <div className="absolute bottom-6 left-0 right-0 px-4 flex justify-center z-30">
+              <form
+                onSubmit={handleSubmit}
+                className="w-full max-w-lg relative"
+              >
+                <input
+                  ref={inputRef}
+                  disabled={!isMyTurn}
+                  className={`input input-lg w-full text-center text-2xl font-bold shadow-2xl border-4 transition-all rounded-full ${
+                    isMyTurn
+                      ? "input-primary scale-105 border-primary bg-base-100"
+                      : "input-disabled bg-base-200/50 border-transparent opacity-60"
+                  }`}
+                  placeholder={
+                    isMyTurn ? "TYPE HERE!" : "Wait for your turn..."
+                  }
+                  value={inputVal}
+                  onChange={(e) => setInputVal(e.target.value)}
+                  autoComplete="off"
+                />
+
+                {gameState.lastExplodedPlayerId && (
+                  <div className="absolute -top-16 left-0 right-0 text-center animate-bounce">
+                    <span className="bg-error text-error-content px-4 py-2 rounded-lg font-bold shadow-lg">
+                      💥 BOOM! Life Lost!
+                    </span>
+                  </div>
+                )}
+              </form>
+            </div>
           </div>
         )}
 
-        {/* GAME OVER */}
+        {/* GAME OVER VIEW */}
         {gameState.status === "gameover" && (
-          <div className="card bg-error text-error-content p-8 text-center animate-bounce">
-            <h2 className="text-6xl font-black mb-4">BOOM!</h2>
+          <div className="flex-1 card bg-neutral text-neutral-content shadow-2xl flex flex-col items-center justify-center p-10 animate-fade-in">
+            <div className="text-8xl mb-4">🏆</div>
+            <h2 className="text-6xl font-black mb-2 text-warning">WINNER</h2>
+            <div className="text-4xl font-bold mb-8">
+              {players.find((p) => p.lives > 0)?.name || "NOBODY"}
+            </div>
             {isHost && (
-              <button onClick={onStartGame} className="btn btn-neutral btn-lg">
+              <button
+                onClick={onStartGame}
+                className="btn btn-primary btn-lg px-12"
+              >
                 Play Again
               </button>
             )}
@@ -104,47 +256,74 @@ export default function GameUI({
         )}
       </div>
 
-      {/* --- RIGHT: SIDEBAR --- */}
-      <div className="md:col-span-1 flex flex-col h-[500px] bg-base-200 border border-base-300 rounded-box shadow-sm overflow-hidden">
-        <div className="p-4 bg-base-300 font-bold text-center uppercase tracking-widest opacity-70">
-          Players
-        </div>
+      {/* --- RIGHT: SIDEBAR (History & Graveyard) --- */}
+      <div className="lg:col-span-1 flex flex-col h-full bg-base-200/50 rounded-2xl border-2 border-base-200 overflow-hidden">
+        {/* Graveyard Section */}
+        <div className="flex-1 flex flex-col p-4 border-b border-base-300">
+          <div className="text-xs font-bold opacity-50 uppercase tracking-widest mb-3 flex justify-between">
+            <span>Graveyard 🪦</span>
+            <span>{players.filter((p) => p.lives <= 0).length} Dead</span>
+          </div>
 
-        {/* PLAYER LIST */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
-          {players.map((p) => (
-            <div
-              key={p.id}
-              className="flex justify-between p-3 bg-base-100 rounded-lg items-center"
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-3 h-3 rounded-full ${p.id === myPlayerId ? "bg-primary" : "bg-neutral"}`}
-                ></div>
-                <span className="font-bold">
-                  {p.name} {p.id === myPlayerId && "(You)"}
-                </span>
+          <div className="overflow-y-auto space-y-2 pr-1">
+            {players.filter((p) => p.lives <= 0).length === 0 ? (
+              <div className="text-center opacity-30 text-sm py-4 italic">
+                No casualties yet...
               </div>
-              <span className="font-mono font-black">{p.score}</span>
-            </div>
-          ))}
+            ) : (
+              players
+                .filter((p) => p.lives <= 0)
+                .map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 p-2 bg-base-100 rounded-lg opacity-50 grayscale"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-neutral text-neutral-content flex items-center justify-center font-bold text-xs">
+                      💀
+                    </div>
+                    <span className="font-bold line-through">{p.name}</span>
+                  </div>
+                ))
+            )}
+          </div>
         </div>
 
-        {/* USED WORDS LOG (Replaces player list in game mode if desired, or sits below) */}
-        <div className="p-4 bg-base-100 border-t border-base-300 h-1/3 flex flex-col">
-          <span className="text-xs font-bold opacity-50 mb-2">HISTORY</span>
-          <div ref={scrollRef} className="overflow-y-auto space-y-1">
+        {/* Used Words Section */}
+        <div className="h-1/2 flex flex-col p-4 bg-base-100">
+          <div className="text-xs font-bold opacity-50 uppercase tracking-widest mb-3">
+            Used Words ({gameState.usedWords.length})
+          </div>
+          <div
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto flex flex-wrap gap-2 content-start pr-1"
+          >
             {gameState.usedWords.map((w, i) => (
-              <div key={i} className="badge badge-outline mr-1 mb-1">
+              <span
+                key={i}
+                className="badge badge-neutral badge-outline font-mono"
+              >
                 {w}
-              </div>
+              </span>
             ))}
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .animate-pop {
+          animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes pop {
+          0% {
+            transform: scale(0.5);
+            opacity: 0;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 }
-
-// Helper to keep React happy with imports
-import { useState } from "react";
