@@ -99,7 +99,7 @@ export default function GameUI({
             {isHost ? (
               <button
                 onClick={onStartGame}
-                disabled={players.length < 1}
+                disabled={players.length < 2}
                 className="btn btn-primary btn-lg px-12 shadow-xl hover:scale-105 transition-transform"
               >
                 Start Game
@@ -115,7 +115,7 @@ export default function GameUI({
 
         {gameState.status === "playing" && (
           <div className="flex-1 relative bg-base-300/50 rounded-3xl border-4 border-base-300 shadow-inner overflow-hidden flex flex-col">
-            <div className="text-center pt-6 z-20 shrink-0">
+            <div className="pb-12 lg:pb-0 text-center pt-6 z-20 shrink-0">
               {isMyTurn ? (
                 <div className="text-2xl md:text-3xl font-black text-primary animate-pulse drop-shadow-sm">
                   YOUR TURN!
@@ -192,7 +192,7 @@ export default function GameUI({
               })}
             </div>
 
-            <div className="relative pt-10 pb-6 md:absolute md:bottom-6 md:left-0 md:right-0 flex justify-center px-4 z-30">
+            <div className="relative pt-6 pb-6 lg:absolute md:bottom-6 md:left-0 md:right-0 flex justify-center px-8 z-30">
               <form
                 onSubmit={handleSubmit}
                 className="w-full max-w-lg relative"
