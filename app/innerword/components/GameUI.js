@@ -177,10 +177,10 @@ export default function GameUI({
                       <span
                         className={`uppercase tracking-wide whitespace-nowrap ${
                           isActive
-                            ? "font-black text-primary text-lg md:text-xl"
+                            ? "font-black text-primary text-2xl md:text-3xl"
                             : isMe
-                              ? "font-bold text-secondary text-base md:text-lg"
-                              : "font-bold text-base-content text-sm md:text-base"
+                              ? "font-bold text-secondary text-xl md:text-2xl"
+                              : "font-bold text-base-content text-lg md:text-xl"
                         }`}
                       >
                         {p.name}
