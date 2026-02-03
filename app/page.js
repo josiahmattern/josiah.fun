@@ -1,4 +1,5 @@
 // app/page.js
+import PlayIcon from "@/components/PlayIcon";
 import Link from "next/link";
 
 export default function Home() {
@@ -18,7 +19,15 @@ export default function Home() {
             href="/wordimposter"
             className="btn btn-primary px-6 text-sm sm:text-base"
           >
-            ▶ play word imposter
+            play word imposter
+            <PlayIcon />
+          </Link>
+          <Link
+            href="/innerword"
+            className="btn btn-primary px-6 text-sm sm:text-base"
+          >
+            play innerword
+            <PlayIcon />
           </Link>
           <a
             href="https://josiah.digital"
@@ -38,4 +47,3 @@ export default function Home() {
     </main>
   );
 }
-
