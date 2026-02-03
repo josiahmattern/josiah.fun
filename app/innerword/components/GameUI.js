@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import RoomCode from "./RoomCode";
 
 export default function GameUI({
   myPlayerId,
@@ -77,10 +78,7 @@ export default function GameUI({
             <h2 className="text-4xl font-black mb-2 opacity-80">
               WAITING ROOM
             </h2>
-            <div className="text-lg opacity-60 mb-8 font-medium">
-              Share the code{" "}
-              <span className="text-primary font-bold">{roomCode}</span>
-            </div>
+            <RoomCode roomCode={roomCode} />
 
             <div className="flex flex-wrap gap-8 justify-center mb-10">
               {players.map((p) => (
