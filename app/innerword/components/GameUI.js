@@ -99,7 +99,7 @@ export default function GameUI({
             {isHost ? (
               <button
                 onClick={onStartGame}
-                disabled={players.length < 2}
+                disabled={players.length < 1}
                 className="btn btn-primary btn-lg px-12 shadow-xl hover:scale-105 transition-transform"
               >
                 Start Game
@@ -192,7 +192,7 @@ export default function GameUI({
               })}
             </div>
 
-            <div className="absolute bottom-6 left-0 right-0 px-4 flex justify-center z-30">
+            <div className="relative pt-10 pb-6 md:absolute md:bottom-6 md:left-0 md:right-0 flex justify-center px-4 z-30">
               <form
                 onSubmit={handleSubmit}
                 className="w-full max-w-lg relative"
