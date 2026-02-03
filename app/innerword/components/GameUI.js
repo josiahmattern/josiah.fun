@@ -21,7 +21,6 @@ export default function GameUI({
 
   const alivePlayers = players.filter((p) => p.lives > 0);
 
-  // Safety check for undefined gameState
   if (!gameState) return <div className="p-10 text-center">Loading...</div>;
 
   useEffect(() => {
@@ -61,9 +60,7 @@ export default function GameUI({
 
   return (
     <div className="w-full grid grid-cols-1 lg:grid-cols-4 gap-6 pb-6 h-[calc(100vh-2rem)]">
-      {/* --- LEFT: GAME AREA (Takes 3/4 width) --- */}
       <div className="lg:col-span-3 flex flex-col gap-4 h-full relative">
-        {/* HEADER */}
         <header className="flex justify-between items-center bg-base-100 p-4 rounded-2xl shadow-sm z-10 shrink-0">
           <h1 className="text-2xl font-black text-primary tracking-tighter">
             INNERWORD
@@ -75,7 +72,6 @@ export default function GameUI({
           </div>
         </header>
 
-        {/* LOBBY VIEW */}
         {gameState.status === "lobby" && (
           <div className="flex-1 card bg-base-200 shadow-xl border-4 border-base-300 flex flex-col items-center justify-center p-8">
             <h2 className="text-4xl font-black mb-2 opacity-80">
@@ -86,13 +82,15 @@ export default function GameUI({
               <span className="text-primary font-bold">{roomCode}</span>
             </div>
 
-            {/* Minimal Lobby List */}
             <div className="flex flex-wrap gap-8 justify-center mb-10">
               {players.map((p) => (
                 <div key={p.id} className="text-center animate-pop">
-                  {/* If it's ME, use Secondary color, otherwise default */}
                   <div
-                    className={`font-bold text-xl ${p.id === myPlayerId ? "text-secondary scale-110" : "text-base-content"}`}
+                    className={`font-bold text-xl ${
+                      p.id === myPlayerId
+                        ? "text-secondary scale-110"
+                        : "text-base-content"
+                    }`}
                   >
                     {p.name}
                   </div>
@@ -117,10 +115,8 @@ export default function GameUI({
           </div>
         )}
 
-        {/* GAME VIEW - CIRCULAR LAYOUT */}
         {gameState.status === "playing" && (
           <div className="flex-1 relative bg-base-300/50 rounded-3xl border-4 border-base-300 shadow-inner overflow-hidden flex flex-col">
-            {/* 1. TOP STATUS BAR */}
             <div className="text-center pt-6 z-20 shrink-0">
               {isMyTurn ? (
                 <div className="text-2xl md:text-3xl font-black text-primary animate-pulse drop-shadow-sm">
@@ -137,30 +133,27 @@ export default function GameUI({
               )}
             </div>
 
-            {/* 2. CIRCULAR ARENA */}
             <div className="flex-1 relative w-full h-full min-h-[400px]">
-              {/* CENTER: BOMB & PROMPT */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-10 w-64 h-64 rounded-full bg-base-100 shadow-2xl border-4 border-base-200">
+              {/* REMOVED CIRCLE: Now just the bomb and word floating */}
+              <div className="absolute top-[44%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-10">
                 <div
-                  className={`text-7xl mb-1 transition-transform ${isMyTurn ? "animate-bounce" : ""}`}
+                  className={`text-5xl md:text-6xl mb-2 transition-transform ${
+                    isMyTurn ? "animate-bounce" : ""
+                  }`}
                 >
                   💣
                 </div>
-                <div className="text-[10px] uppercase font-bold opacity-40 tracking-widest">
-                  CONTAINING
-                </div>
-                <div className="text-6xl font-black uppercase tracking-widest text-primary mt-1">
+                <div className="mb-8 text-3xl md:text-5xl font-black uppercase text-primary drop-shadow-md">
                   {gameState.prompt}
                 </div>
               </div>
 
-              {/* PLAYERS ORBIT */}
               {alivePlayers.map((p, index) => {
                 const total = alivePlayers.length;
                 const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
-                const radius = 38; // Distance from center %
+                const radius = 34;
                 const x = 50 + radius * Math.cos(angle);
-                const y = 50 + radius * Math.sin(angle);
+                const y = 44 + radius * Math.sin(angle);
 
                 const isActive = p.id === gameState.currentPlayerId;
                 const isMe = p.id === myPlayerId;
@@ -176,7 +169,6 @@ export default function GameUI({
                       zIndex: isActive ? 20 : 5,
                     }}
                   >
-                    {/* MINIMAL NAME DISPLAY */}
                     <div
                       className={`flex flex-col items-center transition-all duration-300 ${
                         isActive
@@ -184,11 +176,6 @@ export default function GameUI({
                           : "scale-100 opacity-70"
                       }`}
                     >
-                      {/* Name Text Logic: 
-                          Active = Primary Color & Huge
-                          Me = Secondary Color
-                          Others = Base Color
-                      */}
                       <span
                         className={`uppercase tracking-wide whitespace-nowrap ${
                           isActive
@@ -200,8 +187,6 @@ export default function GameUI({
                       >
                         {p.name}
                       </span>
-
-                      {/* Lives (Hearts) */}
                       {renderLives(p.lives)}
                     </div>
                   </div>
@@ -209,7 +194,6 @@ export default function GameUI({
               })}
             </div>
 
-            {/* 3. INPUT AREA */}
             <div className="absolute bottom-6 left-0 right-0 px-4 flex justify-center z-30">
               <form
                 onSubmit={handleSubmit}
@@ -218,7 +202,7 @@ export default function GameUI({
                 <input
                   ref={inputRef}
                   disabled={!isMyTurn}
-                  className={`input input-lg w-full text-center text-2xl font-bold shadow-2xl border-4 transition-all rounded-full ${
+                  className={`input input-lg w-full text-center text-xl font-bold shadow-2xl border-4 transition-all rounded-2xl ${
                     isMyTurn
                       ? "input-primary scale-105 border-primary bg-base-100"
                       : "input-disabled bg-base-200/50 border-transparent opacity-60"
@@ -230,20 +214,11 @@ export default function GameUI({
                   onChange={(e) => setInputVal(e.target.value)}
                   autoComplete="off"
                 />
-
-                {gameState.lastExplodedPlayerId && (
-                  <div className="absolute -top-16 left-0 right-0 text-center animate-bounce">
-                    <span className="bg-error text-error-content px-4 py-2 rounded-lg font-bold shadow-lg">
-                      💥 BOOM! Life Lost!
-                    </span>
-                  </div>
-                )}
               </form>
             </div>
           </div>
         )}
 
-        {/* GAME OVER VIEW */}
         {gameState.status === "gameover" && (
           <div className="flex-1 card bg-neutral text-neutral-content shadow-2xl flex flex-col items-center justify-center p-10 animate-fade-in">
             <div className="text-8xl mb-4">🏆</div>
@@ -263,9 +238,7 @@ export default function GameUI({
         )}
       </div>
 
-      {/* --- RIGHT: SIDEBAR (History & Graveyard) --- */}
       <div className="lg:col-span-1 flex flex-col h-full bg-base-200/50 rounded-2xl border-2 border-base-200 overflow-hidden">
-        {/* Graveyard Section */}
         <div className="flex-1 flex flex-col p-4 border-b border-base-300">
           <div className="text-xs font-bold opacity-50 uppercase tracking-widest mb-3 flex justify-between">
             <span>Graveyard 🪦</span>
@@ -295,7 +268,6 @@ export default function GameUI({
           </div>
         </div>
 
-        {/* Used Words Section */}
         <div className="h-1/2 flex flex-col p-4 bg-base-100">
           <div className="text-xs font-bold opacity-50 uppercase tracking-widest mb-3">
             Used Words ({gameState.usedWords.length})
